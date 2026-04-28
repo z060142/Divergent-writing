@@ -23,6 +23,13 @@ def cli() -> None:
     p_expand.add_argument("--fragment-id", required=True)
 
     sub.add_parser("board")
+    sub.add_parser("todos")
+
+    p_coherence = sub.add_parser("coherence")
+    p_coherence.add_argument("--x1", type=int, default=0)
+    p_coherence.add_argument("--y1", type=int, default=0)
+    p_coherence.add_argument("--x2", type=int, default=9)
+    p_coherence.add_argument("--y2", type=int, default=9)
 
     args = parser.parse_args()
     store = StateStore()
@@ -43,7 +50,8 @@ def cli() -> None:
         prompt = (
             "Expand this fragment into clear prose. "
             f"fragment_id={args.fragment_id}. "
-            "Call query_lore if needed, then call expand_fragment and set_fragment_hook."
+            "Call query_lore for any setting details you need, then call expand_fragment "
+            "(list all lore keys you used in lore_refs), then call set_fragment_hook."
         )
         result = orch.run("expander_agent", prompt)
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -51,13 +59,35 @@ def cli() -> None:
 
     if args.cmd == "board":
         data = store.load()
+        print("     " + "".join(f"{x:<2}" for x in range(10)))
         for y in range(10):
             row = []
             for x in range(10):
                 s = data["grid"][f"{x},{y}"]["status"]
                 ch = {"gray": "⬜", "red": "🟥", "yellow": "🟨", "green": "🟩"}[s]
                 row.append(ch)
-            print("".join(row))
+            print(f"  {y:<2} " + "".join(row))
+        return
+
+    if args.cmd == "todos":
+        data = store.load()
+        todos = data.get("todos", [])
+        if not todos:
+            print("✓ 沒有待處理項目")
+        else:
+            print(f"待處理項目（{len(todos)} 筆）：\n")
+            for i, item in enumerate(todos, 1):
+                print(f"  {i:>2}. {item}")
+        return
+
+    if args.cmd == "coherence":
+        result = tools.check_coherence(args.x1, args.y1, args.x2, args.y2)
+        if not result["issues"]:
+            print(f"✓ 範圍 ({args.x1},{args.y1})→({args.x2},{args.y2}) 無首尾呼應問題")
+        else:
+            print(f"發現 {result['count']} 個問題：\n")
+            for issue in result["issues"]:
+                print(f"  • {issue}")
         return
 
 

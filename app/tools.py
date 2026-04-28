@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.store import StateStore, STAGES, STATUSES
+
+_STAGES_NEEDING_HOOK = {"expanded", "draft", "final"}
 
 
 class ToolRegistry:
@@ -20,6 +23,7 @@ class ToolRegistry:
             self._fn("upsert_lore", {"key": "string", "value": "string"}),
             self._fn("query_lore", {"key": "string"}),
             self._fn("link_fragments", {"from_id": "string", "to_id": "string"}),
+            self._fn("check_coherence", {"x1": "integer", "y1": "integer", "x2": "integer", "y2": "integer"}),
         ]
 
     def _fn(self, name: str, props: dict[str, str]) -> dict[str, Any]:
@@ -48,12 +52,22 @@ class ToolRegistry:
         frag = data["fragments"][fragment_id]
         frag["content"] = expansion
         frag["stage"] = "expanded"
-        unknown_tokens = [token for token in self._proper_nouns(expansion) if token not in lore_refs]
+
+        unknown_tokens = self._detect_undeclared_lore(expansion, lore_refs, data["lore"])
         if unknown_tokens:
             frag["status"] = "red"
-            data["todos"].append(f"Fragment {fragment_id} has unknown lore tokens: {unknown_tokens}")
+            data["todos"].append(
+                f"Fragment {fragment_id[:8]} 使用了未在 lore_refs 聲明的設定詞: {unknown_tokens}"
+            )
         else:
             frag["status"] = "yellow"
+
+        # 軟性提示：推進至 expanded 但 next_hook 為空
+        if not frag.get("next_hook"):
+            data["todos"].append(
+                f"Fragment {fragment_id[:8]} 已擴寫但尚未設定返回鉤子（next_hook 為空）"
+            )
+
         self.store.save(data)
         return {"ok": True, "status": frag["status"], "unknown": unknown_tokens}
 
@@ -61,7 +75,13 @@ class ToolRegistry:
         if stage not in STAGES:
             return {"ok": False, "error": f"invalid stage: {stage}"}
         data = self.store.load()
-        data["fragments"][fragment_id]["stage"] = stage
+        frag = data["fragments"][fragment_id]
+        frag["stage"] = stage
+        # 軟性提示：推進至需要鉤子的 stage 但 next_hook 為空
+        if stage in _STAGES_NEEDING_HOOK and not frag.get("next_hook"):
+            data["todos"].append(
+                f"Fragment {fragment_id[:8]} 推進至 {stage} 但尚未設定返回鉤子（next_hook 為空）"
+            )
         self.store.save(data)
         return {"ok": True}
 
@@ -111,7 +131,51 @@ class ToolRegistry:
         self.store.save(data)
         return {"ok": True}
 
-    def _proper_nouns(self, text: str) -> list[str]:
-        import re
+    def check_coherence(self, x1: int, y1: int, x2: int, y2: int) -> dict[str, Any]:
+        """掃描 grid 矩形範圍內的片段，回報首尾呼應問題。"""
+        data = self.store.load()
+        issues: list[str] = []
 
-        return re.findall(r"[A-Z][A-Za-z0-9_]*", text)
+        for y in range(min(y1, y2), max(y1, y2) + 1):
+            for x in range(min(x1, x2), max(x1, x2) + 1):
+                cell = data["grid"].get(f"{x},{y}", {})
+                for fid in cell.get("fragment_ids", []):
+                    frag = data["fragments"].get(fid)
+                    if not frag:
+                        continue
+                    stage = frag.get("stage", "keyword")
+                    hook = frag.get("next_hook", "")
+                    links = frag.get("links", [])
+                    short = fid[:8]
+                    if stage in _STAGES_NEEDING_HOOK and not hook:
+                        issues.append(f"({x},{y}) Fragment {short} [{stage}] 缺少返回鉤子")
+                    if stage in {"draft", "final"} and not links:
+                        issues.append(f"({x},{y}) Fragment {short} [{stage}] 無連結，可能是孤立片段")
+
+        return {"ok": True, "issues": issues, "count": len(issues)}
+
+    def _detect_undeclared_lore(
+        self, text: str, lore_refs: list[str], lore_db: dict[str, Any]
+    ) -> list[str]:
+        """
+        回傳出現在 text 中、但未在 lore_refs 聲明的設定詞。
+
+        策略（同時支援中英文）：
+        1. 從 lore 資料庫反查：若任何 lore key 出現在 text 中，視為使用了該設定詞。
+           若未列在 lore_refs，標為未聲明。
+        2. 英文輔助：偵測大寫開頭 token，若不在 lore_refs 也不在 lore_db，視為新造詞彙。
+        """
+        undeclared: list[str] = []
+
+        # 策略 1：lore 資料庫反查（支援中英文）
+        for key in lore_db:
+            if key in text and key not in lore_refs:
+                undeclared.append(key)
+
+        # 策略 2：英文大寫 token 輔助偵測
+        en_tokens = re.findall(r"[A-Z][A-Za-z0-9_]*", text)
+        for token in en_tokens:
+            if token not in lore_refs and token not in lore_db and token not in undeclared:
+                undeclared.append(token)
+
+        return undeclared

@@ -1,42 +1,39 @@
 {
   "captain": {
     "model": "openai/gpt-4.1-mini",
-    "system_prompt": "You orchestrate ADHD-first writing workflow. Route tasks to correct narrow mode and call tools only.",
+    "system_prompt": "You orchestrate ADHD-first writing workflow. Route tasks to the correct narrow mode and call routing/management tools only. You must NOT write lore or expand fragments directly — delegate those to specialized agents.",
     "allowed_tools": [
       "capture_fragment",
-      "expand_fragment",
       "set_fragment_stage",
       "set_fragment_hook",
       "move_fragment",
       "set_cell_status",
-      "upsert_lore",
-      "query_lore",
       "link_fragments"
     ]
   },
   "catcher_agent": {
     "model": "openai/gpt-4.1-mini",
-    "system_prompt": "Convert raw user thoughts into concise keyword fragments. No polishing.",
+    "system_prompt": "Convert raw user thoughts into concise keyword fragments. No polishing. Call capture_fragment for each distinct idea.",
     "allowed_tools": ["capture_fragment", "set_fragment_hook"]
   },
   "expander_agent": {
-    "model": "anthropic/claude-3.7-sonnet",
-    "system_prompt": "Expand fragment text without inventing lore. Only use user input and query_lore outputs.",
+    "model": "anthropic/claude-sonnet-4-6",
+    "system_prompt": "Expand fragment text into flowing prose WITHOUT inventing lore. You may ONLY use content from the user's input and query_lore results. If you need a setting detail, call query_lore first. Provide the lore keys you used in the lore_refs parameter of expand_fragment.",
     "allowed_tools": ["query_lore", "expand_fragment", "set_fragment_stage", "set_fragment_hook"]
   },
   "blueprint_agent": {
     "model": "google/gemini-2.5-pro",
-    "system_prompt": "Maintain 10x10 coherence map and progression statuses.",
-    "allowed_tools": ["move_fragment", "set_cell_status", "link_fragments"]
+    "system_prompt": "Maintain the 10x10 coherence map. Check fragment progression and connections. Use check_coherence to scan ranges, then set_cell_status to update heatmap colours.",
+    "allowed_tools": ["move_fragment", "set_cell_status", "link_fragments", "check_coherence"]
   },
   "lore_agent": {
     "model": "openai/gpt-4.1-mini",
-    "system_prompt": "Maintain lore bible as the only source of truth.",
+    "system_prompt": "Maintain the lore bible as the single source of truth. Only write what the user has explicitly stated. Mark uncertain entries clearly in the value field. Never invent or extend settings.",
     "allowed_tools": ["upsert_lore", "query_lore"]
   },
   "critic_agent": {
     "model": "google/gemini-2.5-pro",
-    "system_prompt": "Inspect red/yellow zones and produce fix-oriented TODOs.",
-    "allowed_tools": ["set_cell_status", "set_fragment_hook"]
+    "system_prompt": "Inspect red/yellow grid zones and produce actionable fix TODOs. Flag fragments missing hooks or links. Update cell statuses after review.",
+    "allowed_tools": ["set_cell_status", "set_fragment_hook", "check_coherence"]
   }
 }
