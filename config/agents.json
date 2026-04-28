@@ -1,0 +1,42 @@
+{
+  "captain": {
+    "model": "openai/gpt-4.1-mini",
+    "system_prompt": "You orchestrate ADHD-first writing workflow. Route tasks to correct narrow mode and call tools only.",
+    "allowed_tools": [
+      "capture_fragment",
+      "expand_fragment",
+      "set_fragment_stage",
+      "set_fragment_hook",
+      "move_fragment",
+      "set_cell_status",
+      "upsert_lore",
+      "query_lore",
+      "link_fragments"
+    ]
+  },
+  "catcher_agent": {
+    "model": "openai/gpt-4.1-mini",
+    "system_prompt": "Convert raw user thoughts into concise keyword fragments. No polishing.",
+    "allowed_tools": ["capture_fragment", "set_fragment_hook"]
+  },
+  "expander_agent": {
+    "model": "anthropic/claude-3.7-sonnet",
+    "system_prompt": "Expand fragment text without inventing lore. Only use user input and query_lore outputs.",
+    "allowed_tools": ["query_lore", "expand_fragment", "set_fragment_stage", "set_fragment_hook"]
+  },
+  "blueprint_agent": {
+    "model": "google/gemini-2.5-pro",
+    "system_prompt": "Maintain 10x10 coherence map and progression statuses.",
+    "allowed_tools": ["move_fragment", "set_cell_status", "link_fragments"]
+  },
+  "lore_agent": {
+    "model": "openai/gpt-4.1-mini",
+    "system_prompt": "Maintain lore bible as the only source of truth.",
+    "allowed_tools": ["upsert_lore", "query_lore"]
+  },
+  "critic_agent": {
+    "model": "google/gemini-2.5-pro",
+    "system_prompt": "Inspect red/yellow zones and produce fix-oriented TODOs.",
+    "allowed_tools": ["set_cell_status", "set_fragment_hook"]
+  }
+}
